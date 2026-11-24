@@ -13,7 +13,7 @@
 
 ## A. 홈 화면 웹앱 설치 (추천)
 
-주소: **https://happyfamily1984.github.io/onchain-tracker/**
+주소: **https://mkc105.github.io/onchain-tracker/**
 
 1. 아이폰에서 **사파리**로 위 주소를 엽니다. (크롬 말고 사파리)
 2. 화면 아래 가운데의 **공유 버튼(□↑)** 을 누릅니다.
@@ -78,5 +78,5 @@ Xcode 프로젝트는 `ios/` 폴더에 이미 만들어 두었어요. 맥에 Xco
 ## 개발 메모
 - 공통 코드: `src/` — 화면·데이터·지표는 안드로이드/아이폰 공용
 - 플랫폼 차이: `src/lib/platform.ts` (알림·앱 상태·뒤로가기 버튼), `src/components/SwipeBack.tsx` (아이폰 스와이프)
-- 웹앱 배포: `npm run deploy:pages` (gh-pages 브랜치로 올림)
+- 웹앱 배포: `DEPLOY_REMOTE=mine npm run deploy:pages` (내 저장소 mkc105/onchain-tracker 의 gh-pages 브랜치로 올림)
 - 안드로이드 빌드는 예전과 같음: `npm run build && npx cap sync android`
