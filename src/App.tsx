@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { App as CapApp } from '@capacitor/app'
-import { Capacitor } from '@capacitor/core'
 import { refreshKrwRate } from './lib/api'
-import { checkAlerts, ensureNotifyPermission, useAlerts } from './lib/alerts'
+import { checkAlerts, useAlerts } from './lib/alerts'
+import { exitApp as quitApp, isAndroid, onHardwareBack, onResume, requestNotify } from './lib/platform'
+import SwipeBack from './components/SwipeBack'
 import { runTopBackHandler } from './lib/back'
 import type { ChainId } from './lib/chains'
 import { getSettings } from './lib/store'
@@ -34,18 +34,18 @@ export default function App() {
   // 고래 → 거래소 입금 감시 (앱 실행 중 주기적으로)
   useEffect(() => {
     const s = getSettings()
-    if (s.alertBtc || s.alertEth || s.alertWatch) ensureNotifyPermission()
+    // 안드로이드·아이폰 앱은 바로 권한을 묻고, 웹앱은 설정 화면의 버튼으로 묻는다
+    if (s.alertBtc || s.alertEth || s.alertWatch) requestNotify(false)
     const first = setTimeout(() => checkAlerts(), 4000)
     const id = setInterval(() => checkAlerts(), Math.max(60, getSettings().refreshSec) * 1000)
-    let sub: Promise<{ remove: () => void }> | null = null
-    if (Capacitor.isNativePlatform()) sub = CapApp.addListener('appStateChange', ({ isActive }) => { if (isActive) checkAlerts() })
-    return () => { clearTimeout(first); clearInterval(id); sub?.then((x) => x.remove()) }
+    const off = onResume(() => checkAlerts())
+    return () => { clearTimeout(first); clearInterval(id); off() }
   }, [])
 
   const push = (r: Route) => { setStack((s) => [...s, r]); window.scrollTo(0, 0) }
   const pop = () => setStack((s) => s.slice(0, -1))
 
-  // 뒤로가기: 열린 창/선택·수정 모드 → 이전 화면 → 홈 탭 → 종료 확인
+  // 뒤로가기: 열린 창/선택·수정 모드 → 이전 화면 → 홈 탭 → (안드로이드만) 종료 확인
   const state = useRef({ stack, tab, exitAsk })
   state.current = { stack, tab, exitAsk }
   const onBack = useCallback(() => {
@@ -53,16 +53,13 @@ export default function App() {
     const s = state.current
     if (s.stack.length) { pop(); return }
     if (s.tab !== 'home') { setTab('home'); return }
-    setExitAsk(true)
+    if (isAndroid) setExitAsk(true) // 아이폰은 앱 종료 확인을 띄우지 않음
   }, [])
 
   useEffect(() => {
     if (getSettings().currency === 'KRW') refreshKrwRate()
-    if (Capacitor.isNativePlatform()) {
-      const h = CapApp.addListener('backButton', onBack)
-      return () => { h.then((x) => x.remove()) }
-    }
-    // 웹 미리보기: Esc 키를 뒤로가기로 사용
+    if (isAndroid) return onHardwareBack(onBack)
+    // 웹·아이폰: Esc 키도 뒤로가기로 사용 (스와이프는 <SwipeBack>)
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onBack() }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
@@ -70,8 +67,7 @@ export default function App() {
 
   const exitApp = () => {
     setExitAsk(false)
-    if (Capacitor.isNativePlatform()) CapApp.exitApp()
-    else window.close()
+    quitApp()
   }
 
   const goTab = (t: Tab) => { setStack([]); setTab(t); window.scrollTo(0, 0) }
@@ -90,6 +86,7 @@ export default function App() {
   return (
     <div className="app">
       <main>{screen}</main>
+      {!isAndroid && <SwipeBack onBack={onBack} />}
       <TermSheet onGlossary={() => { if (top?.name !== 'glossary') push({ name: 'glossary' }) }} />
       {!top && (
         <nav className="tabbar">

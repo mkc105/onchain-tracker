@@ -5,8 +5,7 @@
  * 새로 감지되면 알림함에 쌓고 휴대폰 알림을 띄운다. (앱이 실행 중일 때 동작)
  */
 import { useSyncExternalStore } from 'react'
-import { Capacitor } from '@capacitor/core'
-import { LocalNotifications } from '@capacitor/local-notifications'
+import { requestNotify, showNotifications } from './platform'
 import { fetchAddress } from './api'
 import { getSettings, getWatch } from './store'
 import { fetchBtcWhales, fetchEthWhales, labelOf, probeActivity } from './whale'
@@ -52,32 +51,19 @@ export const useAlerts = () => useSyncExternalStore(subscribe, () => alerts)
 export function markAllRead() { alerts = alerts.map((a) => ({ ...a, read: true })); emit() }
 export function clearAlerts() { alerts = []; emit() }
 
-/** 알림 권한 요청 (안드로이드 13+) */
-export async function ensureNotifyPermission(): Promise<boolean> {
-  if (!Capacitor.isNativePlatform()) return false
-  try {
-    let p = await LocalNotifications.checkPermissions()
-    if (p.display !== 'granted') p = await LocalNotifications.requestPermissions()
-    return p.display === 'granted'
-  } catch { return false }
-}
+/** 알림 권한 요청 — 설정 화면 스위치를 켤 때(사용자 탭) 호출 */
+export const ensureNotifyPermission = () => requestNotify(true)
 
 const SYM = { bitcoin: 'BTC', ethereum: 'ETH' } as const
-let nid = Math.floor(Date.now() / 1000) % 100000
 
 async function notify(list: Alert[]) {
-  if (!list.length || !Capacitor.isNativePlatform()) return
-  try {
-    const ok = (await LocalNotifications.checkPermissions()).display === 'granted'
-    if (!ok) return
-    const items = list.slice(0, 5).map((a) => ({
-      id: ++nid,
-      title: a.source === 'watch' ? `⭐ 관심 주소가 ${a.exchange}(으)로 보냈어요` : `🐋 큰손이 ${a.exchange}(으)로 보냈어요`,
-      body: `${num(a.amount, a.amount >= 1000 ? 0 : 2)} ${SYM[a.chain]} — 팔려고 준비하는 걸 수 있어요${a.lthPct != null ? (a.lthPct >= 50 ? ` · ⏳ 오래 묵힌 코인 ${a.lthPct}%` : ` · 🆕 최근 산 코인 ${100 - a.lthPct}%`) : ''}`,
-    }))
-    if (list.length > 5) items.push({ id: ++nid, title: '🐋 큰손들이 거래소로 많이 보내고 있어요', body: `외 ${list.length - 5}건 — 앱에서 확인하세요` })
-    await LocalNotifications.schedule({ notifications: items })
-  } catch { /* ignore */ }
+  if (!list.length) return
+  const items = list.slice(0, 5).map((a) => ({
+    title: a.source === 'watch' ? `⭐ 관심 주소가 ${a.exchange}(으)로 보냈어요` : `🐋 큰손이 ${a.exchange}(으)로 보냈어요`,
+    body: `${num(a.amount, a.amount >= 1000 ? 0 : 2)} ${SYM[a.chain]} — 팔려고 준비하는 걸 수 있어요${a.lthPct != null ? (a.lthPct >= 50 ? ` · ⏳ 오래 묵힌 코인 ${a.lthPct}%` : ` · 🆕 최근 산 코인 ${100 - a.lthPct}%`) : ''}`,
+  }))
+  if (list.length > 5) items.push({ title: '🐋 큰손들이 거래소로 많이 보내고 있어요', body: `외 ${list.length - 5}건 — 앱에서 확인하세요` })
+  await showNotifications(items)
 }
 
 let running = false
